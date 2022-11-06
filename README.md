@@ -48,6 +48,11 @@ tried to follow the code.
 * The histogram loss for the second pass is implemented but does not seem to function properly and is deactivated for now.
 * The painting estimater to classify art styles is not implemented yet. You can set the style value with the parameter ``-a``.
 
+## Background remover
+
+* https://medium.datadriveninvestor.com/interactive-background-removal-with-opencv-and-grabcut-algorithm-351f16ec77c8
+* https://docs.opencv.org/3.4/d8/d83/tutorial_py_grabcut.html
+* https://stackoverflow.com/questions/56807908/how-to-remove-white-background-with-some-shadow-in-grabcut
 
 ## Acknowledgement
 
