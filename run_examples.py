@@ -11,13 +11,14 @@ art_styles = [1.203930, 5.323582, 4.234591, 5.498451, 4.910163, 9.982656, 5.7319
               5.017763, 4.983986, 4.999594, 1.512768, 1.036211]
 
 if __name__ == "__main__":
-    for i in range(35):
+    for i in range(2):
         print("------------------------------------------------\n")
         print("Image {}:\n".format(i))
-        os.system('deep_painterly_harmonization.py '
-                  '-c data/{}_naive.jpg '
-                  '-s data/{}_target.jpg '
-                  '-o output/output_{}.png '
-                  '-m data/{}_c_mask.jpg '
+        os.system('python C:/Users/keert/PycharmProjects/deep-painterly-harmonization/deep_painterly_harmonization.py  --vgg C:/Users/keert/PycharmProjects/deep-painterly-harmonization/VGG/imagenet-vgg-verydeep-19.mat'
+                  ' -c C:/Users/keert/PycharmProjects/deep-painterly-harmonization/data/{}_naive.jpg '
+                  '-s C:/Users/keert/PycharmProjects/deep-painterly-harmonization/data/{}_target.jpg '
+                  '-o C:/Users/keert/PycharmProjects/deep-painterly-harmonization/output/output_{}.jpg '
+                  '-m C:/Users/keert/PycharmProjects/deep-painterly-harmonization/data/{}_c_mask.jpg '
                   '--num_cores 12 '
-                  '--art_stylization {}'.format(i, i, i, i, art_styles[i], i))
+                  '--art_stylization {}'.format(i, i, i, i, i, art_styles[i], i )
+                  )

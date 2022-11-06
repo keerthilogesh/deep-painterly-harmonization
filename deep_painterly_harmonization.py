@@ -1,10 +1,10 @@
-"""
-Tensorflow Implementation of "Deep Painterly Harmonization", Luan et al.
-
+""" TensorFLow Implementation
+github :https://github.com/mark-koch/deep-painterly-harmonization/blob/master/README.md
 See: https://arxiv.org/abs/1804.03189
 """
-
+##
 import argparse
+from argparse import ArgumentParser
 import cv2
 import scipy.io
 import sklearn.metrics.pairwise
@@ -18,10 +18,8 @@ import tensorflow as tf
 
 parser = argparse.ArgumentParser(description='Performs Deep Painterly Harmonization.')
 
-parser.add_argument('-c', '--content', dest='content_img', required=True,
-                    help='Content image (contains the inserted objects)')
-parser.add_argument('-s', '--style', dest='style_img', required=True,
-                    help='Original style image')
+parser.add_argument('-c', '--content', dest='content_img', required=True, help='Content image (contains the inserted objects)')
+parser.add_argument('-s', '--style', dest='style_img', required=True,help='Original style image')
 parser.add_argument('-o', '--out', dest='output_path', required=True,
                     help='Where to save the image')
 parser.add_argument('-m', '--mask', dest='mask_img', default=None,
@@ -53,7 +51,7 @@ parser.add_argument('--inter_res', dest='inter_res',
 parser.add_argument('--num_cores', dest='num_cores', default=4, type=int,
                     help='Set if you want to skip the postprocessing.')
 
-
+#Pass 1
 parser.add_argument('--p1_content_weight', dest='pass1_content_weight', type=float, default=5,
                     help='Content loss weight for the first pass.')
 parser.add_argument('--p1_style_weight', dest='pass1_style_weight', type=float, default=100,
@@ -73,6 +71,7 @@ parser.add_argument('--p1_style_layer_weights', dest='pass1_style_layer_weights'
                          'uniformely.')
 parser.add_argument('--p1_learning_rate', dest='pass1_learning_rate', type=float, default=0.1,
                     help='Learning rate to use for pass 1 optimization.')
+#PASS 2
 
 parser.add_argument('--p2_content_weight', dest='pass2_content_weight', type=float, default=None,
                     help='Content loss weight for the second pass.')
@@ -106,15 +105,20 @@ parser.add_argument('--p2_learning_rate', dest='pass2_learning_rate', type=float
                     help='Learning rate to use for pass 2 optimization.')
 
 
-VGG_MEAN_VALUES = np.array([103.939, 123.68, 116.779]).reshape((1, 1, 1, 3))
+##
+VGG_MEAN_VALUES = np.array([103.939, 123.68, 116.779]).reshape(1,1,1,3)
+#How: Sum up the intensities of the training set for each color channel separately and divide by the total number of pixels. You can do that manually in python with x_train.mean(axis=(0,1,2)).
+#Why: Once we know the mean, we can subtract it from all pixel values so the intensities are centered at 0. this helps to increase training speed and accuracy.
 
-
+##
+# Build model
 def build_model(input_img, vgg_path):
     print('Loading VGG-19 model...')
 
     net = {}
     vgg = scipy.io.loadmat(vgg_path)
     vgg_layers = vgg['layers'][0]
+    print(vgg_layers)
 
     # Create Layers
     def conv_layer(layer_input, weights):
@@ -207,8 +211,8 @@ def build_model(input_img, vgg_path):
     net['pool5'] = pool_layer(net['relu5_4'])
 
     return net
-
-
+##
+#Build Mask
 def build_mask(mask_img, net):
     # The original mask needs to be transformed to the corresponding size for each layer. In the paper, the authors
     # resize the image, but in the original implementation, they half the resolution at each max pooling and use a
@@ -252,8 +256,8 @@ def build_mask(mask_img, net):
     mask['pool5'] = downscale_to(mask['conv5_4'], net['pool5'])
 
     return mask
-
-
+##
+# Pattern matching for Pass 1 Reconstruction  INDEPENDANT MAPPING
 def rearrange_style_activations_pass1(style_activation_layers, content_activation_layers):
     """ Performs pattern matching for the pass 1 reconstruction.
 
@@ -282,6 +286,7 @@ def rearrange_style_activations_pass1(style_activation_layers, content_activatio
     def get_patches(layer_activations):
         # tf.extract_image_patches returns [batch, h, w, 9 * filters]. The patch is flattened to 3x3=9 in the last di-
         # mension, but the filters are also in the last dimension
+        #tf.image.extract_image_patches - extract patches from images . 3x3 patches
         ps = tf.image.extract_image_patches(layer_activations,
                                             ksizes=[1, 3, 3, 1],       # Patches have size 3x3
                                             strides=[1, 1, 1, 1],      # Patch centres are directly side by side
@@ -300,10 +305,13 @@ def rearrange_style_activations_pass1(style_activation_layers, content_activatio
     for layer in style_activation_layers:
         print("    Working on layer {}...".format(layer))
         _, h, w, _ = style_activation_layers[layer].shape
+        # we get patches for style and content image
         style_patches = get_patches(style_activation_layers[layer])      # [h*w, 9*f]
         content_patches = get_patches(content_activation_layers[layer])  # [h*w, 9*f]
+
         # Calculate cosine distances between patches. Sklearn returns a matrix where dist[i,j] is the distance between
         # the i-th content patch and the j-th style patch. Resulting shape is [h*w, h*w]
+
         dist = sklearn.metrics.pairwise.pairwise_distances(content_patches, style_patches, metric='cosine')
         # For each content patch location h*w, find index h*w of corresponding style patch with minimal cosine distance
         idx = np.argmin(dist, axis=1)  # [h*w]
@@ -318,12 +326,13 @@ def rearrange_style_activations_pass1(style_activation_layers, content_activatio
 
     return rearr_style_activation_layers, mapping
 
-
+## gram matrix - matrix multiplication of feautres and transpose of the feature
+# area = height* weight | depth = total number of filters
 def gram_matrix(x, area, depth):
-    f = tf.reshape(x, (area, depth))
+    f = tf.reshape(x, (area, depth)) # flattening -converting into 1-D
     gram = tf.matmul(tf.transpose(f), f)
     return gram
-
+##
 
 def content_loss_pass1(net, mask, target_act_layers):
     total_loss = 0.
@@ -341,7 +350,7 @@ def content_loss_pass1(net, mask, target_act_layers):
         total_loss += loss * weight
     return total_loss
 
-
+##
 def style_loss_pass1(net, mask, target_act_layers):
     total_loss = 0.
     for layer, weight in zip(args.pass1_style_layers, args.pass1_style_layer_weights):
@@ -361,11 +370,11 @@ def style_loss_pass1(net, mask, target_act_layers):
         loss = tf.losses.mean_squared_error(gram_matrix(act, a, f) / pixels, gram_matrix(target_act, a, f) / pixels)
         total_loss += loss * weight
     return total_loss
-
+##
 
 def rearrange_style_activations_pass2(style_activation_layers, mapping_pass1, reference_layer, mask, style_img,
                                       radius=2):
-    """ Performs pattern matching for the pass 1 reconstruction.
+    """ Performs pattern matching for the pass 2 reconstruction.
 
     Args:
         style_activation_layers: A dictionary mapping layer names to the style image output of the corresponding
@@ -488,7 +497,7 @@ def rearrange_style_activations_pass2(style_activation_layers, mapping_pass1, re
                         duplicate_free_mask[layer][0, y, x] = 0
 
     return rearr_style_activation_layer, duplicate_free_mask
-
+##
 
 def content_loss_pass2(net, mask, target_act_layers):
     total_loss = 0.
@@ -508,7 +517,7 @@ def content_loss_pass2(net, mask, target_act_layers):
         total_loss += loss * weight
     return total_loss
 
-
+##
 def style_loss_pass2(net, mask, target_mask, target_act_layers):
     """  Generates the style loss for pass 2.
 
@@ -538,7 +547,7 @@ def style_loss_pass2(net, mask, target_mask, target_act_layers):
         total_loss += loss * weight
     return total_loss
 
-
+##
 def histogram_loss_old(net, mask, target, target_mask):
     """ This version is way to slow. See improved version below. """
     total_loss = 0.
@@ -587,7 +596,7 @@ def histogram_loss_old(net, mask, target, target_mask):
         content_remapped = tf.stop_gradient(content_remapped)
         total_loss += tf.losses.mean_squared_error(content_masked, content_remapped) * weight
     return total_loss
-
+##
 
 def histogram_loss(net, mask, target, target_mask, num_bins=255):
     """
@@ -655,7 +664,7 @@ def histogram_loss(net, mask, target, target_mask, num_bins=255):
         loss = tf.losses.mean_squared_error(content_masked, content_remapped)
         total_loss += loss
     return total_loss
-
+##
 
 def run_postprocessing(img, content_img, target_img, num_cores=4):
     print("Perform post processing:")
@@ -689,7 +698,7 @@ def run_postprocessing(img, content_img, target_img, num_cores=4):
     # Return the image in the same format we revieved it
     return preprocess_img(img_final)
 
-
+## Generate Foreground mask
 def generate_mask(content, target):
     """ Generates a mask image based on the differences between 'content' and 'target'. """
     subtractor = cv2.createBackgroundSubtractorMOG2()
@@ -697,7 +706,7 @@ def generate_mask(content, target):
     mask = subtractor.apply(content)
     mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)[1]
     return mask
-
+##
 
 def resize_fit(img, max_size):
     """ Resizes an image if its height or width is greater than 'max_size'. """
@@ -710,19 +719,19 @@ def resize_fit(img, max_size):
         img = cv2.resize(img, dsize=(max_size, int(height)), interpolation=cv2.INTER_AREA)
     return img
 
-
+##
 def preprocess_img(img):
     # Convert BGR to RGB
     img = img[..., ::-1]
     # Add batch dimension
     img = img[np.newaxis, :, :, :].astype(np.float)
-    img -= VGG_MEAN_VALUES
+    img = img - VGG_MEAN_VALUES
     return img
-
+##
 
 def postprocess_img(img):
     img = np.copy(img)
-    img += VGG_MEAN_VALUES
+    img = img + VGG_MEAN_VALUES
     # Remove batch dimension
     img = img[0]
     img = np.clip(img, 0, 255).astype('uint8')
@@ -730,12 +739,13 @@ def postprocess_img(img):
     img = img[..., ::-1]
     return img
 
-
+##
 def main():
     start_time = time.time()
 
     # Disable info and warning logging
-    tf.logging.set_verbosity(tf.logging.ERROR)
+    print(tf.__version__)
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
     # Load images
     content_img = cv2.imread(args.content_img, cv2.IMREAD_COLOR)
@@ -746,12 +756,15 @@ def main():
             "Mask image must have the same size as the content image!"
     else:
         assert content_img.shape[0] == style_img.shape[0] and content_img.shape[1] == style_img.shape[1], \
-            "Cannot generate mask when content and style image have different sizes. Please provide custom a mask image"
+        "Cannot generate mask when content and style image have different sizes. Please provide custom a mask image"
         file, extension = os.path.splitext(args.output_path)
         print("Generating mask image and saving at " + file + "_mask" + extension)
         mask_img = generate_mask(content_img, style_img)
-        cv2.imwrite(file + "_mask" + extension, postprocess_img(mask_img))
+        print('mask shape',mask_img.shape)
+        cv2.imwrite(file + "_mask" + extension,(mask_img))
+        #cv2.imwrite(file + "_mask.jpg" + extension, postprocess_img(mask_img))
     style_img = resize_fit(style_img, args.max_size)
+
     style_img = preprocess_img(style_img)
     content_img = resize_fit(content_img, args.max_size)
     content_img = preprocess_img(content_img)
@@ -818,7 +831,7 @@ def main():
             tight_mask = build_mask(mask_img, net)
 
             # Run mask in session to get concrete outputs
-            mask = dict(zip(mask.keys(),  # Zip to create key value pairs of layers and masks
+            mask = dict(zip(mask.keys(),  # Dict-Zip to create key value pairs of layers and masks
                             sess.run([mask[layer] for layer in mask.keys()])))
             tight_mask = dict(zip(tight_mask.keys(),
                               sess.run([tight_mask[layer] for layer in tight_mask.keys()])))
@@ -838,12 +851,13 @@ def main():
             # Rearrange activations in style layers according to patch mapping to content
             mapping_layers = set(args.pass1_style_layers + args.pass1_content_layers)
             style_activation_layers_pass1, _ = \
-                rearrange_style_activations_pass1(dict([(l, style_activation_layers[l]) for l in mapping_layers]),
+                rearrange_style_activations_pass1(dict([(l, style_activation_layers[l]) for l in mapping_layers]),  # Independant Mapping -rearrange style activation
                                                   content_activation_layers)
-
-            loss_c = content_loss_pass1(net, mask, content_activation_layers)
-            loss_s = style_loss_pass1(net, mask, style_activation_layers_pass1)
-            loss_tv = tf.image.total_variation(net['input'] * mask['input'])
+            # Calculate Losses
+            loss_c = content_loss_pass1(net, mask, content_activation_layers) # calculate content loss
+            loss_s = style_loss_pass1(net, mask, style_activation_layers_pass1) #Calculate style loss
+            loss_tv = tf.image.total_variation(net['input'] * mask['input'])  # total variation loss
+            #Total Loss
             loss = args.pass1_content_weight*loss_c + args.pass1_style_weight*loss_s + args.pass1_tv_weight*loss_tv
 
             sess.run(tf.global_variables_initializer())
@@ -881,15 +895,18 @@ def main():
                                fetches=[loss_c, loss_s, loss_tv])
             generated_image = sess.run(net['input'])
 
-            # Apply mask again to reconstruct image
+            # Apply mask again to reconstruct image - Reconstruction
             output_mask = cv2.GaussianBlur(mask_img, (3, 3), 1)  # Smooth edges
             output_mask = np.stack((output_mask, )*3, axis=-1)  # To RGB
             output_mask = np.expand_dims(output_mask, 0)  # Add batch dimension
-
+            #Pass1- Output
             output_pass1 = generated_image * output_mask + style_img * (1 - output_mask)
+
             # Save image
             file, extension = os.path.splitext(args.output_path)
+            #cv2.imwrite(args.output_path,postprocess_img(output_pass1))1q
             cv2.imwrite(file + "_pass1" + extension, postprocess_img(output_pass1))
+            print('Image Saved')
 
         # Pass 2
         if skip_pass2:
@@ -914,7 +931,15 @@ def main():
             # Perform pass2 mapping. Note that in the paper the authors say they used the reference layer features for
             # the mapping but in their code they use the style image resized
             _, rh, rw, _ = net[args.pass2_reference_layer].shape
-            style_img_resized = cv2.resize(style_img[0], (rw, rh))
+
+            print(style_img.shape)
+            print(len(style_img))
+            print(style_img[0])
+            dsize= ((rw.value), (rh.value))
+            print(dsize)
+            style_img_0 = style_img[0]
+            style_img_resized = cv2.resize(style_img_0,dsize)  #style_img_resized = cv2.resize(style_img[0], (float(rw.value), float(rh.value)))
+
             mapping_layers = set(args.pass2_style_layers + [args.pass2_reference_layer])
             style_activation_layers_pass2, duplicate_mask = \
                 rearrange_style_activations_pass2(dict([(l, style_activation_layers[l]) for l in mapping_layers]),
@@ -922,11 +947,12 @@ def main():
                                                   args.pass2_reference_layer,
                                                   tight_mask,
                                                   style_img_resized)
-
-            loss_c = content_loss_pass2(net, mask, content_activation_layers)
-            loss_s = style_loss_pass2(net, mask, duplicate_mask, style_activation_layers_pass2)
-            loss_tv = tf.image.total_variation(net['input'] * mask['input'])
+             # Calculate Loss
+            loss_c = content_loss_pass2(net, mask, content_activation_layers)                           # content loss pass2
+            loss_s = style_loss_pass2(net, mask, duplicate_mask, style_activation_layers_pass2)      # style loss pass2
+            loss_tv = tf.image.total_variation(net['input'] * mask['input'])                        #total variation loss
             loss_hist = tf.constant(0.0)  # histogram_loss(net, mask, style_activation_layers_pass2, duplicate_mask)
+            #Total Loss
             loss = args.pass2_content_weight*loss_c + args.pass2_style_weight*loss_s + args.pass2_tv_weight*loss_tv \
                 + args.pass2_hist_weight*loss_hist
 
@@ -998,7 +1024,10 @@ def main():
 
     print("Done. Took {:.2f}s".format(time.time() - start_time))
 
-
+##
 if __name__ == "__main__":
-    args = parser.parse_args()
-    main()
+   args = parser.parse_args()
+   main()
+
+
+

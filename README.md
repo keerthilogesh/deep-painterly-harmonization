@@ -37,7 +37,7 @@ in the paper.
 skip the second pass, you could run the program with ``--only pass1 post`` . When skipping the first pass or only running the
 post processing, you might want to provide the output of the previous skipped stage with ``--inter_res``.
 
-To see a description of the other arguments, run ``deep_painterly_harmonization.py -h``.
+To see a description of the other arguments, run ``deep_painterly_harmonization.py -h-c``.
 
 
 
